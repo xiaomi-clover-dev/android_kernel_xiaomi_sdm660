@@ -603,9 +603,28 @@ static s8 gtp_enter_sleep(struct goodix_ts_data *ts)
 
 static int gtp_wakeup_sleep(struct goodix_ts_data *ts)
 {
-	gtp_int_output(ts, 1);
+	u8 retry = 0;
+	int ret = -1;
 
-	return 0;
+	while (retry++ < 10) {
+		gtp_int_output(ts, 1);
+		usleep_range(5000, 6000);
+
+		ret = gtp_i2c_test(ts->client);
+		if (!ret) {
+			dev_dbg(&ts->client->dev, "Success wakeup sleep\n");
+
+			gtp_int_sync(ts, 25);
+			if (ts->pdata->esd_protect)
+				gtp_init_ext_watchdog(ts->client);
+
+			return ret;
+		}
+		gtp_reset_guitar(ts->client, 20);
+	}
+
+	dev_err(&ts->client->dev, "Failed wakeup from sleep mode\n");
+	return -EINVAL;
 }
 
 static int gtp_find_valid_cfg_data(struct goodix_ts_data *ts)
