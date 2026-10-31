@@ -763,6 +763,17 @@
 &tavil_snd {
 	status = "disabled";
 };
+/* GPIO24/25 belong to fingerprint SPI, not the unused SoundWire bus. */
+&cdc_sdw_gpios {
+	status = "disabled";
+};
+
+&msm_sdw_codec {
+	swr_master {
+		status = "disabled";
+	};
+};
+
 &int_codec {
 	status = "okay";
 	qcom,wsa-disable;
