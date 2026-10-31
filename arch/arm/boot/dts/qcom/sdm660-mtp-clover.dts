@@ -59,7 +59,8 @@
 	hall_switch {
 
 	    compatible = "hall-switch,och175";
-	    pinctrl-names = "hall_active","hall_suspend";
+	    /* hall_e7s relies on the driver core to select the default state. */
+	    pinctrl-names = "default", "sleep";
 	    pinctrl-0 = <&hall_int_active>;
 	    pinctrl-1 = <&hall_int_suspend>;
 	    //interrupt-parent = <&msm_gpio>;
