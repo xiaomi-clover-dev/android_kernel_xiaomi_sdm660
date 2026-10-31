@@ -36,6 +36,41 @@ static struct clk *l2_clk;
 static DEFINE_PER_CPU(struct cpufreq_frequency_table *, freq_table);
 static bool hotplug_ready;
 
+#ifdef CONFIG_MACH_XIAOMI_CLOVER
+/* Separate from userspace/perflock limits; 0 = stock, 1 = balanced, 2 = save. */
+static unsigned int clover_power_profile;
+static DEFINE_MUTEX(clover_profile_lock);
+
+static int clover_set_power_profile(const char *val, const struct kernel_param *kp)
+{
+	unsigned int profile;
+	int cpu, ret;
+
+	ret = kstrtouint(val, 0, &profile);
+	if (ret)
+		return ret;
+	if (profile > 2)
+		return -EINVAL;
+
+	mutex_lock(&clover_profile_lock);
+	WRITE_ONCE(clover_power_profile, profile);
+	get_online_cpus();
+	for_each_online_cpu(cpu)
+		cpufreq_update_policy(cpu);
+	put_online_cpus();
+	mutex_unlock(&clover_profile_lock);
+	return 0;
+}
+
+static const struct kernel_param_ops clover_profile_ops = {
+	.set = clover_set_power_profile,
+	.get = param_get_uint,
+};
+module_param_cb(clover_power_profile, &clover_profile_ops,
+		&clover_power_profile, 0644);
+MODULE_PARM_DESC(clover_power_profile, "Clover CPU cap: 0=stock 1=balanced 2=save");
+#endif
+
 struct cpufreq_suspend_t {
 	struct mutex suspend_mutex;
 	int device_suspended;
@@ -114,8 +149,17 @@ done:
 
 static int msm_cpufreq_verify(struct cpufreq_policy *policy)
 {
-	cpufreq_verify_within_limits(policy, policy->cpuinfo.min_freq,
-			policy->cpuinfo.max_freq);
+	unsigned int max_freq = policy->cpuinfo.max_freq;
+#ifdef CONFIG_MACH_XIAOMI_CLOVER
+	unsigned int profile = READ_ONCE(clover_power_profile);
+
+	/* verify runs after boost/thermal notifiers too; never raise their max. */
+	if (profile == 1)
+		max_freq = min(max_freq, policy->cpu < 4 ? 1536000U : 1958400U);
+	else if (profile == 2)
+		max_freq = min(max_freq, 1401600U);
+#endif
+	cpufreq_verify_within_limits(policy, policy->cpuinfo.min_freq, max_freq);
 	return 0;
 }
 
